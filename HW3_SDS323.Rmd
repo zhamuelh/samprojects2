@@ -1,0 +1,155 @@
+---
+title: "Exercise 3"
+author: "Samuel Higgins"
+date: "4/14/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Question 1: Predictive Model Building
+```{R}
+library(tidyverse)
+library(MASS)
+library(lmtest)
+
+green_b <- read.csv("https://github.com/jgscott/SDS323/raw/master/data/greenbuildings.csv")
+
+
+green_b$Energystar2 <- factor(green_b$Energystar, levels = c(0,1), labels = c("no", "yes"))
+green_b$LEED2 <- factor(green_b$LEED, levels = c(0,1), labels = c("no", "yes"))
+green_b$green_rating2 <- factor(green_b$green_rating, levels = c(0,1), labels = c("no", "yes"))
+
+lmbasic_gr <- lm(Rent ~ green_rating2, data = green_b)
+summary(lmbasic_gr)
+t.test(Rent ~ green_rating2, data = green_b, var.eq = T)
+
+
+## Stepwise Selection
+fit1 <- lm(Rent ~ green_rating2 + ., data = green_b)
+step1 <- stepAIC(fit1, direction = "backward")
+step1$anova
+coeftest(step1)
+
+
+fit2 <- lm(Rent ~ green_rating2 + size + (green_rating2*size), data = green_b)
+summary(fit2)
+
+ggplot(data = green_b, aes(x = size, y = Rent, group = green_rating2)) + 
+  geom_point(aes(color = green_rating2)) +
+  geom_smooth(method = "lm") +
+  facet_grid("green_rating2") + 
+  scale_color_manual(values = c("no"="#E69F00","yes"="#56B4E9"))
+
+fit3 <- lm(Rent ~ green_rating2 + stories + (green_rating2*stories), data = green_b)
+summary(fit3)
+
+ggplot(data = green_b, aes(x = stories, y = Rent)) +
+  geom_point(aes(color = green_rating2)) + 
+  geom_smooth(method = "lm") +
+  facet_grid("green_rating2") +
+  scale_color_manual(values = c("no"="#E69F00","yes"="#56B4E9"))
+  
+
+```
+
+#### Controlling for size, there is a significant effect of green rating on Rent. When a building is green certified (either with LEED or Energystar certification), rent increases 3.887 dollars per square foot on average, t = 4.388, df = 7890, p < .001. Controlling for stories, there is also a significant effect of green rating on rent. When a building is green certified, rent increases 4.288 dollars per square foot on average, t= 4.704, df = 7890, p < .001. Stepwise selection was used to obtain the best predicted model for price. 
+
+
+## Question 2: What Causes What?
+
+### 2.1 
+#### It would be tricky to run a regression on "Crime" and "Police" for a sample of cities because some cities may have different reasons for putting more cops on the street, unrelated to that city's crime rate. In the podcast, they say that Washington D.C is a "high value" target for terrorist attacks. Based on a terror detection system, they may put more cops in public places and on the streets based on a potential terroristic threat, and when this happens, crime rate tends to be lower. 
+
+### 2.2 
+#### The researchers discovered the terrorist alert system in D.C, which gives a good example of an increase in police in the city, unrelated to crime. Controlling for Metro ridership, there is a significant effect of high-alert days on total daily crime. For every 1-unit increase in the high-alert system, total daily crime decreases by 7.316 on average. p < .05.
+
+### 2.3 
+#### They had to control for Metro ridership because they wanted to know if tourists and civilians were less likely to be on the streets or in public as a result of the alert system. They found that the number of victims in the public remained unchanged on "high-terror" days.
+
+### 2.4
+#### On High-alert days, the total number of crimes decreases by 2.621 for District 1, relative to other police districts. Likewise, the total number of crimes decreases by .571 for other police districts, relative to District 1. Controlling for interactions, the log midday-ridership increases by 2.477. 
+
+
+## Question 3: Clustering and PCA 
+```{R}
+library(cluster)
+library(factoextra)
+
+wine <- read.csv("https://github.com/jgscott/SDS323/raw/master/data/wine.csv")
+
+
+wine1 <- wine %>% dplyr::select(., -color, -quality)
+wine_nums <- wine1 %>% select_if(is.numeric) %>% scale
+wine_pca <- princomp(wine_nums)
+names(wine_pca)
+
+summary(wine_pca, loadings = T)
+
+## Scree plot of eigenvalues
+fviz_screeplot(wine_pca, addlabels =T)
+screeplot(wine_pca, type = "line", main = "Scree Plot") # Looks like we should retain prin. comps. 1-3
+
+## Biplot
+fviz_pca_biplot(wine_pca)
+
+## Plot individuals
+fviz_pca_ind(wine_pca, label = "none", habillage = wine$color, addEllipses = T, palette = c("#E69F00", "#56B4E9"))
+
+
+### PAM Clustering 
+pam_wine <- wine %>% pam(2)
+
+sil_width <- vector()
+for(i in 2:10){
+  pam_fit <- wine %>% pam(i)
+  sil_width[i] <- pam_fit$silinfo$avg.width
+}
+
+ggplot() + geom_line(aes(x = 1:10), y = sil_width) + scale_x_continuous(name = "k", breaks = 1:10)
+
+plot(pam_wine, which = 2) # 0.52 - Reasonable structure found, but really weak
+
+pamclust <- wine %>% mutate(cluster = as.factor(pam_wine$clustering))
+pamclust %>% 
+  ggplot(aes(residual.sugar, volatile.acidity, color = cluster)) + 
+  geom_point() +
+  scale_color_manual(values = c("1" = "#E69F00", "2" = "#56B4E9"))
+
+fviz_cluster(pam_wine, palette = c("#E69F00", "#56B4E9"))
+
+```
+
+#### Conducting PAM clustering on the wine data set, we see that individual observations are clustered around wine color. From the silhouette plot, the average silhouette width is 0.52, indicating that a "barely" reasonable structure has been found after setting the clusters to k = 2. 
+
+## Question 4: Market Segmentation
+```{R}
+library(ggiraphExtra)
+
+sm <- read.csv("https://github.com/jgscott/SDS323/raw/master/data/social_marketing.csv")
+
+sm_fit <- lm(politics ~ ., data = sm)
+sm_step <- stepAIC(sm_fit, direction = "backward")
+sm_step$anova
+coeftest(sm_step)
+
+sm_fit2 <- lm(politics ~ tv_film + travel + business + (tv_film*travel) + (travel*business) + 
+                (tv_film*business), data = sm)
+summary(sm_fit2)
+
+ggplot(data = sm, aes(x = travel, y = politics)) + 
+  geom_point(aes(color = business)) + 
+  geom_smooth(method = "lm")
+
+ggplot(data = sm, aes(x = tv_film, y = politics)) +
+  geom_point(aes(color = business)) +
+  geom_smooth(method = "lm")
+
+```
+#### Controlling for businness and tv/film, there is a significant effect of travel on politics. When a tweet is categorized as travel, political tweets increase by 0.826 on average, t = 49.89, df = 7875, p < .001. The effect of tv/film tweets on political tweets is different for different values of travel tweets t = -3.990, df = 7875, p < .001. Likewise, the effect of travel tweets on political tweets is different for different values of business tweets, t = 8.527, p <.001. Finally, the effect of tv/film tweets on political tweets is different for different values of business tweets, t = -2.624, p < .05. 
+
