@@ -1,0 +1,137 @@
+---
+title: "SDS 323 Project"
+author: "Samuel Higgins"
+date: "5/7/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+#### For this project, I wanted to look at Covid-19 cases over time for a few Texas counties and compare them through data visualization. I wanted to know which counties are experiencing a high number of cases and which counties are experiencing a low number of cases. Cases are ultimately dependent on the number of testing that's done. What I found was that some counties are not on the same page in terms of cases reported. Bexar county for example started recording cases early February, while other counties, like Zapata county, started recording cases early April. There are potential factors that may explain this, such as a lack of testing kits due to a delay or, in the case of San Antonio, the early exposure to the virus. 
+
+## Introduction
+```{R}
+library(tidyverse)
+
+cvd <- read.csv("https://github.com/zhamuelh/samprojects2/raw/master/Data%20sets/counties_covid19.csv")
+head(cvd)
+txcv <- cvd %>% 
+  filter(state == "Texas") %>% pivot_wider(names_from = state, values_from = county) %>%
+  rename(county_tx = Texas)
+head(txcv)
+tail(txcv)
+```
+
+#### I guess you could say my question for this analysis is essentially "how's everybody doing" in regards to the current pandemic in Texas. I will mainly look at Covid-19 cases over time and mortality over time for a few counties. This study could potentially be a good precursor to future studies. One such study could be evaluating changes in certain populations throughout the duration of the pandemic. Another future study could look at predicting the rate of Covid-19 spread on variables like population density and the number of open grocery stores in a city.
+
+## Methods
+#### For this project, I imported two data sets. The first data set (annotated as cvd in the introduction chunk) contains the number of Covid-19 cases and deaths over time at the county level in the U.S. This data was released publicly on the New York Times' GitHub account. The second data set (annnotated as txp) contains population data for each Texas county as well as variables for the number of people in poverty and median income for that county. This data set was compiled from data obtained from the U.S Census Bureau. I tidyed the 'cvd' set to only display Texas data at the county level (txcv). Later I joined a summarised version of 'txcv' (txcv_cases) to 'txp' to obtain a table (txcv2) that displays summarised information on Covid-19 cases and deaths for each county (which will be outdated as the days progress). With 'txcv' I created time series plots for a few counties visualizing Covid-19 cases and deaths over time. 'Txcv2' was created as a summary table (Table 1), but also to calculate incidence for each county.
+
+## Time Series Data Visualization: Texas Counties
+```{R}
+txcv$date <- as.Date(txcv$date)
+
+# Time series plot for Travis, El Paso, Bexar, Dallas Counties
+txcv %>% filter(county_tx == c("Travis", "El Paso", "Bexar", "Dallas")) %>% 
+  ggplot(aes(x = date, y = cases )) +
+  geom_line(aes(color = county_tx)) +
+  geom_point(aes(color = county_tx),na.rm = T) +
+  facet_grid("county_tx") +
+  theme(legend.position = "none") +
+  ggtitle("Figure 1. Texas: Covid-19 Cases Feb 12 - May 5, 2020 ") +
+  scale_colour_viridis_d()
+
+#...for Zapata County
+txcv %>% filter(county_tx == "Zapata") %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line() + geom_point() +
+  ggtitle("Figure 2. Zapata County Covid-19 Cases Apr 6 - May 5, 2020")
+
+#...for Harris County
+txcv %>% filter(county_tx == "Harris") %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line() + geom_point() +
+  ggtitle("Figure 3. Harris County Covid-19 Cases Mar 5 - May 5, 2020")
+
+# Covid-19 Mortality over time
+txcv %>% filter(county_tx == c("Travis", "El Paso", "Bexar", "Dallas")) %>%
+  ggplot(aes(x = date, y = deaths)) +
+  geom_bar(stat = "identity") +
+  facet_grid("county_tx") + stat_smooth(color = "orange") +
+  ggtitle("Figure 4. Texas: Covid-19 Mortality Feb 12 - May 5, 2020")
+
+# Harris County
+txcv %>% filter(county_tx == "Harris") %>%
+  ggplot(aes(x = date, y = deaths)) +
+  geom_bar(stat = "identity") +
+  stat_smooth(color = "orange") +
+  ggtitle("Figure 5. Harris County Mortality Mar 19 - May 5, 2020")
+
+```
+
+## Results
+#### Figure 1 is a time series plot of Covid-19 cases over time, faceted by county. Here we see that Bexar county starts recording cases Februaruy 12th, and as of May 5th had a case count of 1689. Dallas, El Paso, and Travis record cases on the 14th, 16th, and 17th of March, respectively. As of May 5th, Dallas had 4623 cases, El Paso had 1080 cases, and Travis had 1876 cases of the coronavirus. Highlighted in Figure 3, Harris county, which contains the Houston metropolis, had the highest number of recorded cases on May 5th at 7128 cases. Figure 2 displays Zapata county, which recorded its first case April 6th, and had 7 cases on May 5th (more about Zapata county will be discussed in the conclusion).
+
+#### Figure 4 is a time series plot of deaths over time for the counties displayed in Figure 1. On May 5th, Travis had 58 Covid-19 related deaths, El Paso had 22, Bexar had 52, and Dallas had 121. Like with the number of cases, Harris county also had the highest number of deaths, at 144 as of May 5th.
+
+## Slopes for plots
+```{R}
+tx_trav <- txcv %>% filter(county_tx == "Travis")
+lm1 <- lm(cases ~ date, data = tx_trav)
+summary(lm1)
+
+tx_elp <- txcv %>% filter(county_tx == "El Paso")
+lm2 <- lm(cases ~ date, data = tx_elp)
+summary(lm2)
+
+tx_bex <- txcv %>% filter(county_tx == "Bexar")
+lm3 <- lm(cases ~ date, data = tx_bex)
+summary(lm3)
+
+tx_dal <- txcv %>% filter(county_tx == "Dallas")
+lm4 <- lm(cases ~ date, data = tx_dal)
+summary(lm4)
+
+tx_har <- txcv %>% filter(county_tx == "Harris")
+lm5 <- lm(cases ~ date, data = tx_har)
+summary(lm5)
+
+```
+
+## Results (cont.)
+#### In the chunk above, I computed the slopes for the plots in the figures that were discussed earlier. For Travis county, for every (one) day, Covid-19 cases inreases by 3.845 on average. For El Paso county, Covid-19 cases increases by 2.152 on averge, every day. Bexar county, had an average slope of 1.964 for Covid-19 cases per day. Dallas county had an average slope of 8.023 for Covid-19 cases per day. Finally, for Harris county, Covid-19 cases increases by 134.6 on average for every day.
+
+## Conclusion
+#### To conclude, most if not all of our "metropolitan counties" are affected by the Covid-19 pandemic to some varying degree. Harris county is definitely taking the brunt of the pandemic, along with Dallas county. For our smaller counties, there may not be a full picture as of yet. As mentioned previously, Zapata county has only recorded 7 cases since April 6th, which could be indicative of a lack of testing, or it could just mean that the disease is spreading a lot more slowly there. There are counties that have recorded less cases than Zapata, if you filter 'txcv2' to where you return the minimum number of cases for a county, you will get multiple counties that have only 1 case recorded. All of these counties have less than 20,000 people, some less than 10,000. Although most of this is just comparison, I believe this report can provide potential foresight for Covid-19 relief for our state.
+
+## Covid-19 Summary and Population Measures 
+```{R}
+txp <- read.csv("https://github.com/zhamuelh/samprojects2/raw/master/Data%20sets/txcounty_poverty.csv")
+
+txp <- txp %>% rename(county_tx = County.Name) %>% rename(population_est  = Population.Estimates) %>%
+  rename(n_poverty = Number.in.Poverty) %>% rename(med_income = Median.Household.income) %>% 
+  select(county_tx, population_est, n_poverty, med_income)
+
+txcv_cases <- txcv %>% group_by(county_tx) %>% summarise(current_cases = max(cases), 
+                                                              total_deaths = max(deaths))
+txcv2 <- left_join(txcv_cases, txp, by = "county_tx")
+txcv2 <- txcv2 %>% mutate(incidence = current_cases/population_est) %>% na.omit #Clay County omitted due to NAs
+
+txcv2 %>% filter(current_cases == min(current_cases))
+```
+
+
+```{R}
+library(kableExtra)
+
+kable(head(txcv2, n = 25), caption = "Table 1. Covid-19 Summary and Population Measures per County") %>% 
+  kable_styling(latex_options = c("striped", "condensed"))
+kable(tail(txcv2, n = 25)) %>% kable_styling(latex_options = c("striped", "condensed"))
+```
+
+
