@@ -1,0 +1,169 @@
+---
+title: 'Project 1: Exploratory Data Analysis '
+author: "Samuel Higgins"
+date: "3/3/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```
+
+### Introduction
+The datasets I have chosen for this project are DMepi and pr, which are both found within the epi package in R. Both datasets contain variables related to the onset of diabetes in a Danish population. Pr is specialized towards diabetes prevalence in Denmark and contains variables such as age, sex, population size, and number of diabetes patients. DMepi contains more of the same as pr, however it differs in that it has variables related to mortality and person-years, with and without the diabetes condition. It is important to note that DMepi does not contain data for females (even though it says it does when you print ?Dmepi), so the entirety of this analysis will be done in regards to the male population. I chose these datasets beacause I am in the process of pursuing a career in epidemiology and I thought that exploring the epi package would be good way to familiarize myself with some of the common funcitions and built-in datasets that I may encounter later on. 
+
+
+
+```{R}
+library(tidyverse)
+library(Epi)
+library(car)
+library(mosaic)
+library(reshape2)
+library(forcats)
+library(cluster)
+library(GGally)
+
+data("DMepi")
+data("pr")
+```
+
+
+```{R}
+pr
+?pr
+```
+
+```{R}
+DMepi
+?DMepi
+```
+
+
+
+### Tidying and Joining
+```{R}
+untidy_pr <- pr %>% 
+  pivot_wider(names_from = sex, values_from = c("X", "N"))
+untidy_pr
+
+tidy_pr <- untidy_pr %>%
+  pivot_longer(c("X_F", "X_M", "N_F", "N_M"), names_to = "sex", values_to = c("X", "N"))
+tidy_pr
+
+untidy_epi <- DMepi %>%
+  pivot_wider(names_from = sex, values_from = X) %>% rename(M_Incidence = M)
+untidy_epi
+
+tidy_epi <- untidy_epi %>%
+  pivot_longer(M_Incidence, names_to = "sex", values_to = "X") %>% 
+  mutate(sex = recode(sex, "'M_Incidence'='M'")) %>%
+  select(-"F")
+tidy_epi
+
+
+full_epi <- full_join(DMepi, pr, by = c("sex", "A"))
+full_epi
+```
+
+Both datasets were relatively tidy, however I went ahead and untidyed them and tidyed them back together. I chose to do a full join because both datasets had columns I could not drop and would be invaluable later. I did a full join by sex and age but not "X" because both "X" variables were somewhat unrelated. "X" in DMepi equated to number of new diabetes diagnoses, while "X" in pr related to number of diabetes patients.
+
+
+### Wrangling
+```{R}
+d_diabetes <- full_epi %>% 
+  rename(new_diabetes_diagnoses = X.x, num_diabetes_patients = X.y, Year = P,
+                    Deaths_diabetes = D.DM, Deaths_wo.diabetes = D.nD, PY_diabetes = Y.DM, PY_w.diabetes = Y.nD)
+
+d_diabetes2 <- d_diabetes %>%
+  filter(Year >= 2010) %>% select(A, Year, N, Deaths_diabetes, Deaths_wo.diabetes, new_diabetes_diagnoses, num_diabetes_patients) %>% arrange(Year) %>% 
+  mutate(d_prevalence = num_diabetes_patients+new_diabetes_diagnoses/N, d_incidence = new_diabetes_diagnoses/N)
+  
+d_diabetes2                                
+
+summ_diabetes <- d_diabetes2 %>% 
+  group_by(Year, A) %>% summarise_at(vars(Deaths_diabetes, Deaths_wo.diabetes, new_diabetes_diagnoses, num_diabetes_patients), funs(mean, sd, var, IQR, min, max, q25=quantile(., probs =.25), q75=quantile(., probs =.75)))
+summ_diabetes
+
+
+
+```
+I started off by renaming some of the column names so that they would be more coherent. I then filtered the data to where I would only get rows where the year was 2010-2016. I filtered this way because the data in pr was current for the year 2010. After arranging by year, I used mutate to calculate two new columns, one for diabetes prevalence and the other for diabetes incidence. Using this new dataset (d_diabetes2), I grouped by year and age and used summarise_at to select which numeric variables I wanted to calculate summary statistics for. 
+
+
+
+### Visualization
+```{R}
+# cor prep
+d_cor <- round(cor(d_diabetes2), 2)
+d_cor
+d_melt <- melt(d_cor)
+head(d_melt)
+
+d_melt %>%
+  ggplot(aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+For the correlation heatmap, it's evident that the mortality variables (Deaths_diabetes and Deaths_wo.diabetes) had some positive correlation d_prevalence and d_incidence. Year and age had no correlation or negative correlation with most of our novel numeric variables(columns 4 through 6 on the heatmap) while age did have some correlation with our novel numeric variables.  
+
+
+
+```{R}
+mdf <- summ_diabetes %>% select(Year, Deaths_diabetes_mean, Deaths_wo.diabetes_mean)
+mdf_melt <- melt(mdf, id.vars = "Year")
+
+mdf_melt %>%
+  ggplot(aes(x = factor(Year), y = value, fill = fct_rev(variable))) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_x_discrete(labels = c("2010", "2011", "2012", "2013", "2014", "2015", "2016")) +
+  labs(x = "Year", y = "Average Deaths") + ggtitle("Average Deaths per Year in Danish Men") +
+  scale_fill_discrete(name = NULL, labels = c("Non-Diabetic Deaths (avg)", "Diabetic Deaths (avg)")) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))
+```
+For the second plot, I created a stacked barplot showing the average amount of deaths for each year with the cause of mortality as a result of diabetes or without diabetes. It might be hard to see, but average diabetic deaths gradually increases each year while the average non-diabetic deaths varied for each year.  
+
+
+```{R}
+d_diabetes2 %>% 
+  ggplot(aes(y = num_diabetes_patients, x = A, fill = Year)) +
+  geom_bar(stat = "identity", aes(fill = Year)) +
+  scale_x_continuous(breaks = seq(0,100, 10)) +
+  labs(x = "Age", y= "Number of Diabetes Patients") + ggtitle("Number of Male Diabetic Patients by Year and Age") +
+  scale_fill_gradient(low = "yellow", high = "red")
+
+```
+For my third plot, I created a barplot showing the number of male diabetic patients by age per year. For each year, it is evident that the number of diabetic patients gradually increases by age with more diabetic patients being within the 60 to 70 age group. Also for each year, the total number of diabetic patients increases. The number of diabetic patients seems to drop off after 70, which is most likely attributed to mortality. 
+
+
+### Dimenisonality Reduction
+```{R}
+pam1 <- d_diabetes2 %>% pam(2)
+pam1
+
+sil_width <- vector()
+for(i in 2:10){
+  pam_fit <- d_diabetes2 %>% pam(i)
+  sil_width[i] <- pam_fit$silinfo$avg.width
+}
+
+ggplot() +
+  geom_line(aes(x = 1:10), y = sil_width) +
+  scale_x_continuous(name = "k", breaks = 1:10)
+
+plot(pam1, which = 2)
+
+ggpairs(d_diabetes2, columns = 4:9, aes(color=as.factor(pam1$clustering)))
+
+```
+For the dimensionality portion, I performed PAM clustering on the d_diabetes2 dataset. Originally, I had PAM set to 3 clusters, but eventually chose 2 clusters. The average silhouette width was 0.75, indicating a strong structure was found. I then visualized all pairwise combinations on my novel numeric variables. A majority of the clusters correlated strongly with each other. New diabetes diagnoses correlated poorly with our mortality variables (Diabetic Deaths, Non-diabetic Deaths).   
+
+
+
+
+
