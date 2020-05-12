@@ -1,0 +1,235 @@
+---
+title: "Project 2: Modeling, Testing, and Predicting"
+author: "Samuel Higgins"
+date: "4/27/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+class_diag<-function(probs,truth){
+  
+  tab<-table(factor(probs>.5,levels=c("FALSE","TRUE")),truth)
+  acc=sum(diag(tab))/sum(tab)
+  sens=tab[2,2]/colSums(tab)[2]
+  spec=tab[1,1]/colSums(tab)[1]
+  ppv=tab[2,2]/rowSums(tab)[2]
+
+  if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1
+  
+  #CALCULATE EXACT AUC
+  ord<-order(probs, decreasing=TRUE)
+  probs <- probs[ord]; truth <- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+  TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+  
+  n <- length(TPR)
+  auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+```
+
+
+## Introduction
+```{R}
+library(tidyverse)
+
+liverd <- read.csv("https://github.com/zhamuelh/samprojects2/raw/master/Data%20sets/liverdrecords.csv")
+
+liverd <- liverd %>% rename(Liver_Disease = Dataset) %>% rename(Total_Proteins = Total_Protiens) %>%
+  mutate(Liver_Disease = ifelse(Liver_Disease == "1", 1, 0)) %>% na.omit
+
+head(liverd)
+```
+
+#### This data set contains 583 observations with 416 liver disease patients and 167 non-afflicted patients. Each numeric variable (except for age) is a measurement relating to a liver protein, enzyme, etc. Categorical variables include liver disease status and sex. Liver patient records were collected from North East of Andhra Pradesh, India. The data was obtained [here](https://www.kaggle.com/uciml/indian-liver-patient-records), however. 
+
+## Hypothesis Testing
+```{R}
+man1 <- manova(cbind(Total_Bilirubin, Direct_Bilirubin, Alkaline_Phosphotase, 
+                     Alamine_Aminotransferase, Total_Proteins, Albumin, 
+                     Albumin_and_Globulin_Ratio, Age) ~ Liver_Disease, data = liverd)
+summary(man1)
+
+summary.aov(man1)
+
+pairwise.t.test(liverd$Total_Bilirubin, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Direct_Bilirubin, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Alkaline_Phosphotase, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Alamine_Aminotransferase, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Albumin, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Albumin_and_Globulin_Ratio, liverd$Liver_Disease, p.adj = "none")
+pairwise.t.test(liverd$Age, liverd$Liver_Disease, p.adj = "none")
+
+.05/16 #Bonferroni correction
+```
+
+#### In total 16 tests were conducted: 1 MANOVA, 8 ANOVAs, and 7 post-hoc t-tests. After a bonferroni adjustment, the probability of making a type I error is .0031. A one-way MANOVA was conducted to determine the effect of liver disease status on all of our numeric variables. Significant differences were found for liver disease status for at least one of our dependent variables, F = 9.350, p < .0001. After running univariate ANOVAs for each of our dependent variables, only "Total Proteins" was found to not be significant (F = 0.652, p = 0.419). Post-hoc t-tests were calculated to determine if liver disease status differed across our variables. Liver disease onset and absence were found to differ from each other significantly in regards to all the variables that were tested.
+
+## Randomization Test
+```{R}
+rand_dist <- vector()
+for(i in 1:5000){
+  new <- data.frame(albumin = sample(liverd$Albumin), liver_disease = liverd$Liver_Disease)
+  rand_dist[i] <- mean(new[new$liver_disease == "1" ,]$albumin) -
+    mean(new[new$liver_disease == "0" ,]$albumin)
+}
+
+liverd %>% group_by(Liver_Disease) %>% summarise(ldmean = mean(Albumin)) %>%
+  summarise(diff_mean = diff(ldmean))
+  
+
+hist(rand_dist, main = NULL, ylab = NULL) ; abline(v = -0.2809, col = "red")
+
+mean(rand_dist > .2809 | rand_dist < -.2809)
+
+
+t.test(Albumin ~ Liver_Disease, data = liverd)
+```
+
+#### Albumin was chosen because low levels of the protein could indicate the onset of liver disease (more info can be found [here](https://medlineplus.gov/lab-tests/albumin-blood-test/)). The null hypothesis is that there is no difference between the means of albumin and liver disease status. Likewise, the alternative hypothesis is that there is a difference between the means of albumin and liver disease status. After conducting a randomization test, a p-value of 0 was obtained, leading to a rejection of the null hypothesis and further conclude that there is a significant difference between the true means of albumin and liver disease status (t = 3.907, p = 0). 
+
+## Linear Regression Model
+```{R}
+library(lmtest)
+library(sandwich)
+
+liverd$DB_c <- liverd$Direct_Bilirubin - mean(liverd$Direct_Bilirubin)
+
+ld_fit <- lm(Albumin ~ DB_c * Liver_Disease, data = liverd)
+summary(ld_fit)
+
+liverd %>% 
+  ggplot(aes(x = DB_c, y = Albumin, color = factor(Liver_Disease))) +
+  geom_point() +
+  stat_smooth(method = "lm", se = F, fullrange = T)
+
+plot(ld_fit) #Assumptions Check
+
+coeftest(ld_fit, vcov. = vcovHC(ld_fit))
+```
+
+#### The predicted albumin level for a non-afflicted patient with an average direct bilirubin level is 3.044 g/dL. Controlling for liver disease status, for every 1 mg/dL increase in direct bilirubin level, albumin decreases by 0.269 on average. Controlling for direct bilirubin, a patient with liver disease shows a 0.038 g/dL increase in albumin. The slope for direct bilirubin on albumin is 0.214 greater for liver disease afflicted patients than non-afflicted patients.After recomputing the regression with robust standard errors, the interaction between DB and liver disease status become significant, p = 0.0049. Average DB also becomes "more" significant, p = 0.00038 compared to p = 0.0197. Average DB and the interaction between average DB and liver disease status show significant variation in albumin (t = -3.57, p = 0.0003 & t = 2.82, p = 0.0049 respectively).
+
+## Bootstrapping
+```{R}
+ld_dist <- replicate(5000, {
+  boot_ld <- liverd[sample(nrow(liverd), replace = T),]
+  fit <- lm(Albumin ~ DB_c * Liver_Disease, data = boot_ld)
+  coef(fit)
+})
+
+ld_dist %>% t %>% as.data.frame() %>% summarise_all(sd)
+
+```
+
+#### After bootstrapping standard errors, there is an increase in the SE values compared to the robust SEs that were calculated prior. However, compared to the original SEs, the values of the boot SEs are lower. 
+
+## Logistic Regression and Cross Validation
+```{R}
+library(plotROC)
+
+ld_fit2 <- glm(Liver_Disease ~ Albumin + Alkaline_Phosphotase, data = liverd,family = "binomial")
+summary(ld_fit2)
+
+#Confusion Matrix
+ld_prob <- predict(ld_fit2, type = "response")
+table(predict = as.numeric(ld_prob > .5), truth = liverd$Liver_Disease) %>% addmargins
+
+liverd$logit <- predict(ld_fit2, type = "link")
+
+#AUC plot
+liverd %>%
+  ggplot() +
+  geom_density(aes(logit, color = factor(Liver_Disease), fill = factor(Liver_Disease)), alpha = 0.5) +
+  geom_vline(xintercept = 0) +
+  xlab("log-odds") + 
+  geom_rug(aes(logit, color = factor(Liver_Disease)))
+
+#ROC curve  
+ld_ROC <- liverd %>% 
+  ggplot() +
+  geom_roc(aes(d = Liver_Disease, m = ld_prob), n.cuts = 0)
+ld_ROC
+  
+calc_auc(ld_ROC)
+
+
+#10-Fold Cross Validation
+k = 10
+
+ld_cv <- liverd[sample(nrow(liverd)),]
+folds <- cut(seq(1:nrow(liverd)), breaks = k, labels = F)
+
+diags <- NULL
+for(i in 1:k){
+  train <- ld_cv[folds != i,]
+  test <- ld_cv[folds == i,]
+  truth <- test$Liver_Disease
+  
+  cvfit <- glm(Liver_Disease ~ Albumin + Alkaline_Phosphotase, data = train, family = "binomial")
+  probs <- predict(cvfit, newdata = test, type = "response")
+  diags <- rbind(diags, class_diag(probs, truth)) #class_diag for convenience 
+}
+
+summarise_all(diags, mean)
+
+yhat <- predict(cvfit)
+mean((liverd$Liver_Disease - yhat)^2)
+
+```
+
+#### Controlling for alkaline phosphotase, albumin has a significant negative impact on the odds of liver disease onset. Controlling for albumin, alkaline phosphotase has a significant positive impact on the odds of liver disease onset. After computing a confusion matrix, the sensitivity for the model is 0.716 and the specificity is a value of 1. Calculating the AUC gives a value of 0.674, which tells us that the model is a poor at classifying patients with liver disease and those without. By performing 10-fold cross validation on the model, there is a very miniscule increase in auc (=0.676).
+
+## LASSO
+```{R}
+library(glmnet)
+
+liverd$LD_n <- liverd$Liver_Disease %>% as.numeric #code for orignial LD_n was lost, here for knit
+
+y <- as.matrix(liverd$Liver_Disease)
+x <- liverd %>% dplyr::select(-Liver_Disease, -Gender, -DB_c, -LD_n, -logit) %>% mutate_all(scale) %>% as.matrix
+
+cv <- cv.glmnet(x,y)
+plot(cv$glmnet.fit, "lambda", label = T) ; abline(v = log(cv$lambda.1se)) #Plot looks cool 
+
+lasso1 <- glmnet(x, y, lambda = cv$lambda.1se)
+coef(lasso1)
+
+
+#LASSO Assisted 10-Fold CV
+k = 10
+
+ld_cv2 <- liverd[sample(nrow(liverd)),]
+folds2 <- cut(seq(1:nrow(liverd)), breaks = k, labels = F)
+
+diags2 <- NULL
+for(i in 1:k){
+  train2 <- ld_cv[folds != i,]
+  test2 <- ld_cv[folds == i,]
+  truth2 <- test2$Liver_Disease
+  
+  cvfit2 <- glm(Liver_Disease ~ Albumin + Alkaline_Phosphotase + Age +
+                  Direct_Bilirubin + Alamine_Aminotransferase +
+                  Albumin_and_Globulin_Ratio, data = train2, family = "binomial")
+  probs2 <- predict(cvfit, newdata = test2, type = "response")
+  diags2 <- rbind(diags, class_diag(probs2, truth2)) #class_diag for convenience 
+}
+
+summarise_all(diags2, mean)
+
+yhat2 <- predict(cvfit2)
+mean((liverd$Liver_Disease - yhat2)^2)
+
+```
+
+#### After performing a LASSO on the data, the variables age, direct bilirubin, alkaline phosphotase, alamine aminotransferase, albumin, and albumin/globulin ratio are retained. The mean-squared error is a value of 12.107, which is larger than the mean-squared error that was obtained prior (1.123). 
+
