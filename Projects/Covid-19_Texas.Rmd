@@ -1,0 +1,201 @@
+---
+title: 'Covid-19: A Look at Texas Cities'
+author: 'Samuel Higgins'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{R}
+library(tidyverse)
+library(kableExtra)
+library(ggmap)
+library(maps)
+library(mapdata)
+
+covid <- read.csv("C:/Users/samue/Documents/College Notes/PyRe/Data sets/us-counties.csv")
+glimpse(covid)
+
+```
+
+
+```{R}
+txcovid <- covid %>% 
+  filter(state == "Texas") %>%
+  pivot_wider(names_from = state, values_from = county) %>%
+  rename(county_tx = Texas)
+
+glimpse(txcovid)
+
+txcovid$date <- as.Date(txcovid$date)
+
+```
+
+# Travis County
+```{R}
+txcovid_travis <- txcovid %>% 
+  filter(county_tx == "Travis") %>%
+  mutate(diff_cases = cases - lag(cases), 
+         diff_deaths = deaths - lag(deaths))
+
+# Difference of Covid-19 cases over time for Travis County
+txcovid_travis %>% 
+  ggplot(aes(x = date, y = diff_cases)) +
+  geom_line() +
+  ggtitle("Travis County: Change in Covid-19 Cases March 13 - October 18")
+
+# Difference of Covid-19 deaths over time for Travis County
+txcovid_travis %>% 
+  ggplot(aes(x = date, y = diff_deaths)) +
+  geom_bar(stat = "identity") +
+  stat_smooth(color = "orange") +
+  ggtitle("Travis County: Change in Covid-19 Deaths March 13 - October 18")
+
+```
+
+# Harris County
+```{R}
+txcovid_harris <- txcovid %>% 
+  filter(county_tx == "Harris") %>% 
+  mutate(diff_cases = cases - lag(cases),
+         diff_deaths = deaths - lag(deaths))
+
+# Difference of Covid-19 cases over time for Harris County
+txcovid_harris %>%
+  ggplot(aes(x = date, y = diff_cases)) +
+  geom_line() +
+  ggtitle("Harris County: Change in Covid-19 Cases March 5 - October 18")
+
+# Difference of Covid-19 deaths over time for Harris County
+txcovid_harris %>% 
+  ggplot(aes(x = date, y = diff_deaths)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Harris County: Change in Covid-19 Deaths March 5 - October 18")
+
+```
+
+# Bexar County
+```{R}
+txcovid_bexar <- txcovid %>%
+  filter(county_tx == "Bexar") %>%
+  mutate(diff_cases = cases - lag(cases),
+         diff_deaths =  deaths - lag(deaths))
+
+# Difference of Covid-19 cases over time for Bexar County
+txcovid_bexar %>% 
+  ggplot(aes(x = date, y = diff_cases)) +
+  geom_line() +
+  ggtitle("Bexar County: Change in Covid-19 Cases February 12 - October 18")
+
+# Difference of Covid-19 deaths over time for Bexar County
+txcovid_bexar %>%
+  ggplot(aes(x = date, y = diff_deaths)) + 
+  geom_bar(stat = "identity") +
+  ggtitle("Bexar County: Change in Covid-19 Deaths February 12 - October 18")
+
+```
+
+# Dallas County
+```{R}
+txcovid_dallas <- txcovid %>%
+  filter(county_tx == "Dallas") %>%
+  mutate(diff_cases = cases - lag(cases),
+         diff_deaths = deaths - lag(deaths))
+
+# Difference of Covid-19 cases over time for Dallas County
+txcovid_dallas %>%
+  ggplot(aes(x = date, y = diff_cases)) +
+  geom_line() +
+  ggtitle("Dallas County: Change in Covid-19 Cases March 10 - October 18")
+
+# Difference of Covid-19 deaths over time for Dallas County
+txcovid_dallas %>% 
+  ggplot(aes(x = date, y = diff_deaths)) +
+  geom_bar(stat = "identity") +
+  stat_smooth(color = "red") +
+  ggtitle("Dallas County: Change in Covid-19 Deaths March 10 - October 18")
+
+```
+
+# El Paso County
+```{R}
+txcovid_elpaso <- txcovid %>% 
+  filter(county_tx == "El Paso") %>%
+  mutate(diff_cases = cases - lag(cases),
+         diff_deaths = deaths - lag(deaths))
+
+# Difference of Covid-19 cases over time for El Paso County
+txcovid_elpaso %>% 
+  ggplot(aes(x = date, y = diff_cases)) +
+  geom_line() + 
+  ggtitle("El Paso County: Change in Covid-19 Cases March 13 - October 18")
+
+# Difference of Covid-19 deaths over time for El Paso County
+txcovid_elpaso %>% 
+  ggplot(aes(x = date, y = diff_deaths)) +
+  geom_bar(stat = "identity") +
+  stat_smooth(color = "green") +
+  ggtitle("El Paso County: Change in Covid-19 Deaths March 13 - October 18")
+
+```
+
+# Covid-19 Cases Choropleth Map 
+```{R}
+txcovid_current <- txcovid %>%
+  group_by(county_tx, fips) %>% 
+  summarise(current_cases = max(cases),
+            total_deaths = max(deaths)) %>%
+  na.omit
+
+glimpse(txcovid_current)
+
+states <- map_data("state")
+tx_state <- subset(states, region == "texas")
+counties <- map_data("county")
+tx_county <- subset(counties, region == "texas")
+
+tx_base <- ggplot(data = tx_state, mapping = aes(x = long, y = lat, group = group)) +
+  coord_fixed(1.3) +
+  geom_polygon(color = "black", fill = "gray")
+
+remove_axis <- theme(
+  axis.text = element_blank(),
+  axis.line = element_blank(),
+  axis.ticks = element_blank(),
+  panel.border = element_blank(),
+  panel.grid = element_blank(),
+  axis.title = element_blank()
+)
+
+capfirst <- function(s){
+  paste(toupper(substring(s, 1, 1)), substring(s, 2), sep = "")
+}
+
+tx_county$subregion <- capfirst(tx_county$subregion)
+
+covid_map <- left_join(txcovid_current, tx_county, by = c("county_tx" = "subregion"))
+
+cmap <- tx_base +
+  geom_polygon(data = covid_map, aes(fill = current_cases), color = "white") +
+  geom_polygon(color = "black", fill = NA) + 
+  theme_bw() +
+  remove_axis
+
+cmap2 <- cmap +
+  scale_fill_gradient(low = "#FEDFDF", high = "#FD100F",
+                      breaks = c(150000, 125000, 100000, 75000, 50000, 25000),
+                      name = "Current Covid-19 Cases")
+cmap2
+```
+
+# Table of Current Covid-19 Cases and Total Deaths
+```{R}
+kable(head(txcovid_current, n = 50), caption = "Covid-19 Current Cases and Deaths by County") %>%
+  kable_styling(latex_options = c("striped", "condensed"), stripe_color = "#B2BEB5")
+kable(tail(txcovid_current, n = 50)) %>% kable_styling(latex_options = c("striped", "condensed"), 
+                                                      stripe_color = "#B2BEB5")
+````
