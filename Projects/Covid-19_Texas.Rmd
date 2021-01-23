@@ -17,7 +17,7 @@ library(ggmap)
 library(maps)
 library(mapdata)
 
-covid <- read.csv("C:/Users/samue/Documents/College Notes/PyRe/Data sets/us-counties.csv")
+covid <- read.csv("C:/Users/samue/Documents/College Notes/PyRe/Data sets/COVID-19/us_counties_Jan17_21.csv")
 glimpse(covid)
 
 ```
@@ -42,18 +42,19 @@ txcovid_travis <- txcovid %>%
   mutate(diff_cases = cases - lag(cases), 
          diff_deaths = deaths - lag(deaths))
 
+
 # Difference of Covid-19 cases over time for Travis County
 txcovid_travis %>% 
   ggplot(aes(x = date, y = diff_cases)) +
   geom_line() +
-  ggtitle("Travis County: Change in Covid-19 Cases March 13 - October 18")
+  ggtitle("Travis County: Change in Covid-19 Cases March 13 - January 17")
 
 # Difference of Covid-19 deaths over time for Travis County
 txcovid_travis %>% 
   ggplot(aes(x = date, y = diff_deaths)) +
   geom_bar(stat = "identity") +
   stat_smooth(color = "orange") +
-  ggtitle("Travis County: Change in Covid-19 Deaths March 13 - October 18")
+  ggtitle("Travis County: Change in Covid-19 Deaths March 13 - January 17")
 
 ```
 
@@ -68,13 +69,13 @@ txcovid_harris <- txcovid %>%
 txcovid_harris %>%
   ggplot(aes(x = date, y = diff_cases)) +
   geom_line() +
-  ggtitle("Harris County: Change in Covid-19 Cases March 5 - October 18")
+  ggtitle("Harris County: Change in Covid-19 Cases March 5 - January 17")
 
 # Difference of Covid-19 deaths over time for Harris County
 txcovid_harris %>% 
   ggplot(aes(x = date, y = diff_deaths)) +
   geom_bar(stat = "identity") +
-  ggtitle("Harris County: Change in Covid-19 Deaths March 5 - October 18")
+  ggtitle("Harris County: Change in Covid-19 Deaths March 5 - January 17")
 
 ```
 
@@ -89,13 +90,13 @@ txcovid_bexar <- txcovid %>%
 txcovid_bexar %>% 
   ggplot(aes(x = date, y = diff_cases)) +
   geom_line() +
-  ggtitle("Bexar County: Change in Covid-19 Cases February 12 - October 18")
+  ggtitle("Bexar County: Change in Covid-19 Cases February 12 - January 17")
 
 # Difference of Covid-19 deaths over time for Bexar County
 txcovid_bexar %>%
   ggplot(aes(x = date, y = diff_deaths)) + 
   geom_bar(stat = "identity") +
-  ggtitle("Bexar County: Change in Covid-19 Deaths February 12 - October 18")
+  ggtitle("Bexar County: Change in Covid-19 Deaths February 12 - January 17")
 
 ```
 
@@ -110,14 +111,14 @@ txcovid_dallas <- txcovid %>%
 txcovid_dallas %>%
   ggplot(aes(x = date, y = diff_cases)) +
   geom_line() +
-  ggtitle("Dallas County: Change in Covid-19 Cases March 10 - October 18")
+  ggtitle("Dallas County: Change in Covid-19 Cases March 10 - January 17")
 
 # Difference of Covid-19 deaths over time for Dallas County
 txcovid_dallas %>% 
   ggplot(aes(x = date, y = diff_deaths)) +
   geom_bar(stat = "identity") +
   stat_smooth(color = "red") +
-  ggtitle("Dallas County: Change in Covid-19 Deaths March 10 - October 18")
+  ggtitle("Dallas County: Change in Covid-19 Deaths March 10 - January 17")
 
 ```
 
@@ -132,14 +133,14 @@ txcovid_elpaso <- txcovid %>%
 txcovid_elpaso %>% 
   ggplot(aes(x = date, y = diff_cases)) +
   geom_line() + 
-  ggtitle("El Paso County: Change in Covid-19 Cases March 13 - October 18")
+  ggtitle("El Paso County: Change in Covid-19 Cases March 13 - January 17")
 
 # Difference of Covid-19 deaths over time for El Paso County
 txcovid_elpaso %>% 
   ggplot(aes(x = date, y = diff_deaths)) +
   geom_bar(stat = "identity") +
   stat_smooth(color = "green") +
-  ggtitle("El Paso County: Change in Covid-19 Deaths March 13 - October 18")
+  ggtitle("El Paso County: Change in Covid-19 Deaths March 13 - January 17")
 
 ```
 
@@ -187,7 +188,7 @@ cmap <- tx_base +
 
 cmap2 <- cmap +
   scale_fill_gradient(low = "#FEDFDF", high = "#FD100F",
-                      breaks = c(150000, 125000, 100000, 75000, 50000, 25000),
+                      breaks = c(250000, 200000, 150000, 100000, 50000, 10000),
                       name = "Current Covid-19 Cases")
 cmap2
 ```
